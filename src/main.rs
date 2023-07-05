@@ -2,6 +2,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::thread;
 
 fn main() {
     let program_files = match env::var("ProgramFiles") {
@@ -19,25 +20,40 @@ fn main() {
         return;
     }
 
-    let compression_level = "9";
+    let compression_level = "7";
 
-    for arg in env::args().skip(1) {
-        if let Ok(metadata) = fs::metadata(&arg) {
-            if metadata.is_file() {
-                compress_file(&seven_zip_path, &compression_level, &arg);
-            } else if metadata.is_dir() {
-                compress_directory(&seven_zip_path, &compression_level, &arg);
-            } else {
-                println!("Invalid argument: {}", arg);
-            }
-        } else {
-            println!("Invalid argument: {}", arg);
-        }
+    let args: Vec<String> = env::args().skip(1).collect();
+
+    let num_threads = 2;
+
+    let handles: Vec<_> = args
+        .into_iter()
+        .take(num_threads)
+        .map(|arg| {
+            let seven_zip_path = seven_zip_path.clone();
+            thread::spawn(move || {
+                if let Ok(metadata) = fs::metadata(&arg) {
+                    if metadata.is_file() {
+                        compress_file(&seven_zip_path, &compression_level, &arg);
+                    } else if metadata.is_dir() {
+                        compress_directory(&seven_zip_path, &compression_level, &arg);
+                    } else {
+                        println!("Invalid argument: {}", arg);
+                    }
+                } else {
+                    println!("Invalid argument: {}", arg);
+                }
+            })
+        })
+        .collect();
+
+    for handle in handles {
+        handle.join().unwrap();
     }
 }
 
 fn compress_file(seven_zip_path: &PathBuf, compression_level: &str, file_path: &str) {
-    let output = Command::new(&seven_zip_path)
+    let output = Command::new(seven_zip_path)
         .args(&["a", "-tzip", &format!("-mx={}", compression_level), &format!("{}.zip", file_path), file_path])
         .output();
 
@@ -56,7 +72,7 @@ fn compress_file(seven_zip_path: &PathBuf, compression_level: &str, file_path: &
 }
 
 fn compress_directory(seven_zip_path: &PathBuf, compression_level: &str, dir_path: &str) {
-    let output = Command::new(&seven_zip_path)
+    let output = Command::new(seven_zip_path)
         .args(&["a", "-tzip", &format!("-mx={}", compression_level), &format!("{}.zip", dir_path), dir_path])
         .output();
 
