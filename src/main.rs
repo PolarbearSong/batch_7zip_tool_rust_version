@@ -1,5 +1,6 @@
 use std::env;
 use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -23,18 +24,18 @@ fn main() {
 
     let file_list: Vec<_> = env::args().skip(1).collect();
 
-    let pool = Arc::new(ThreadPool::new(max_threads));
+    let pool = Arc::new(Mutex::new(ThreadPool::new(max_threads)));
 
     for file in file_list {
         if let Ok(metadata) = fs::metadata(&file) {
             if metadata.is_file() {
                 let seven_zip_path_clone = seven_zip_path.clone();
                 let compression_level = compression_level.to_string();
-                pool.execute(move || compress_file(&seven_zip_path_clone, &compression_level, &file));
+                pool.lock().unwrap().execute(move || compress_file(&seven_zip_path_clone, &compression_level, &file));
             } else if metadata.is_dir() {
                 let seven_zip_path_clone = seven_zip_path.clone();
                 let compression_level = compression_level.to_string();
-                pool.execute(move || compress_directory(&seven_zip_path_clone, &compression_level, &file));
+                pool.lock().unwrap().execute(move || compress_directory(&seven_zip_path_clone, &compression_level, &file));
             } else {
                 println!("Invalid argument: {}", file);
             }
@@ -43,12 +44,18 @@ fn main() {
         }
     }
 
-    pool.join();
+    pool.lock().unwrap().join();
+
 }
 
 fn compress_file(seven_zip_path: &PathBuf, compression_level: &str, file_path: &str) {
+    let file_name_without_extension = Path::new(file_path)
+        .file_stem()
+        .and_then(|os_str| os_str.to_str())
+        .unwrap_or(file_path);
+    
     let output = Command::new(&seven_zip_path)
-        .args(&["a", "-tzip", "-bso2", &format!("-mx={}", compression_level), &format!("{}.zip", file_path), file_path])
+        .args(&["a", "-tzip", "-bso2", &format!("-mx={}", compression_level), &format!("{}.zip", file_name_without_extension), file_path])
         .output();
 
     match output {
@@ -88,6 +95,7 @@ struct ThreadPool {
     workers: Vec<Worker>,
     sender: std::sync::mpsc::Sender<Job>,
 }
+
 impl ThreadPool {
     fn new(max_threads: usize) -> Self {
         assert!(max_threads > 0);
@@ -110,7 +118,7 @@ impl ThreadPool {
         F: FnOnce() + Send + 'static,
     {
         let job = Box::new(job);
-        self.sender.send(job).unwrap();
+        self.sender.send(job).expect("Failed to send job to the thread pool.");
     }
 
     fn join(&mut self) {
