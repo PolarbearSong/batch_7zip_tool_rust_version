@@ -55,7 +55,7 @@ fn compress_file(seven_zip_path: &PathBuf, compression_level: &str, file_path: &
         .unwrap_or(file_path);
     
     let output = Command::new(&seven_zip_path)
-        .args(&["a", "-tzip", "-bso2", &format!("-mx={}", compression_level), &format!("{}.zip", file_name_without_extension), file_path])
+        .args(&["a", "-tzip", &format!("-mx={}", compression_level), "-bso2", &format!("{}.zip", file_name_without_extension), file_path])
         .output();
 
     match output {
@@ -74,7 +74,7 @@ fn compress_file(seven_zip_path: &PathBuf, compression_level: &str, file_path: &
 
 fn compress_directory(seven_zip_path: &PathBuf, compression_level: &str, dir_path: &str) {
     let output = Command::new(&seven_zip_path)
-        .args(&["a", "-tzip", "-bso2" ,&format!("-mx={}", compression_level), &format!("{}.zip", dir_path), dir_path])
+        .args(&["a", "-tzip",&format!("-mx={}", compression_level), "-bso2", &format!("{}.zip", dir_path), dir_path])
         .output();
 
     match output {
